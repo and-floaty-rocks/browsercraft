@@ -7,6 +7,10 @@ module.exports = function(grunt) {
     // Metadata.
     pkg: grunt.file.readJSON('package.json'),
     uglify: {
+      vendor: {
+        src: 'dist/vendor.js',
+        dest: 'dist/vendor.min.js'
+      },
       dist: {
         src: 'dist/<%= pkg.name %>.js',
         dest: 'dist/<%= pkg.name %>.min.js'
@@ -39,7 +43,7 @@ module.exports = function(grunt) {
       },
       lib: {
         files: '<%= jshint.lib.src %>',
-        tasks: ['jshint:lib', 'browserify', 'concat']
+        tasks: ['jshint:lib', 'browserify', 'concat:dist']
       },
       test: {
         files: '<%= jshint.test.src %>',
@@ -53,11 +57,16 @@ module.exports = function(grunt) {
       }
     },
 		concat: {
-			dist: {
+			vendor: {
         src: [
 					'vendor/Box2dWeb-2.1.a.3.js', 
 					'vendor/iioEngine.js', 
-					'vendor/iioDebugger.js',
+					'vendor/iioDebugger.js'
+				],
+				dest: 'dist/vendor.js'
+			},
+			dist: {
+        src: [
 					'dist/app.js'
 				],
 				dest: 'dist/<%= pkg.name %>.js'
@@ -74,6 +83,7 @@ module.exports = function(grunt) {
 	grunt.loadNpmTasks('grunt-browserify');
 
   // Default task.
-  grunt.registerTask('default', ['jshint', 'nodeunit', 'browserify', 'concat:dist', 'uglify']);
+  grunt.registerTask('default', ['jshint', 'nodeunit', 'browserify', 'concat:dist', 'uglify:dist']);
+  grunt.registerTask('compile', ['jshint', 'nodeunit', 'browserify', 'concat', 'uglify']);
 
 };
