@@ -1,0 +1,37 @@
+{
+  "name": "browsercraft",
+  "description": "bc2",
+  "version": "0.0.1",
+  "homepage": "andfloatyrocks.com",
+  "author": {
+    "name": "dstrek",
+    "email": "batman@dstrek.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/and-floaty-rocks/browsercraft.git"
+  },
+  "bugs": {
+    "url": "https://github.com/and-floaty-rocks/browsercraft/issues"
+  },
+  "main": "lib/browsercraft",
+  "engines": {
+    "node": ">=0.8.20"
+  },
+  "scripts": {
+    "test": "grunt nodeunit"
+  },
+  "devDependencies": {
+    "grunt-contrib-concat": "~0.3.0",
+    "grunt-contrib-uglify": "~0.2.0",
+    "grunt-contrib-nodeunit": "~0.2.0",
+    "grunt-contrib-watch": "~0.4.0",
+    "grunt": "~0.4.1",
+    "grunt-contrib-jshint": "~0.6.0",
+    "grunt-browserify": "~1.2.0"
+  },
+  "keywords": [],
+  "dependencies": {
+    "uuid": "~1.4.1"
+  }
+}
