@@ -28,10 +28,9 @@ exports['awesome'] = {
     done();
   },
   'no args': function(test) {
-    test.expect(2);
+    test.expect(1);
     // tests here
     test.equal(browsercraft.awesome(), 'awesome', 'should be awesome.');
-		test.ok(browsercraft.uuid());
     test.done();
   }
 };

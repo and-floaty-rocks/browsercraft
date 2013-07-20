@@ -49,6 +49,9 @@ module.exports = function(grunt) {
     },
 		browserify: {
       client: {
+				options: {
+					debug: true
+				},
         src: ['lib/entry.js'],
         dest: 'dist/app.js'
       }
