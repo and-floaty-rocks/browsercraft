@@ -1,7 +1,11 @@
 /*
 The iio Engine
 Version 1.2.2+
-Last Update 6/30/2013
+Last Update 7/25/2013
+
+PARAMETER CHANGE NOTICE:
+-the io.rmvFromGroup function now has the parameters (tag, obj, canvasIndex)
+   if you only specify a tag, all the objects from that group will be removed
 
 The iio Engine is licensed under the BSD 2-clause Open Source license
 
@@ -29,7 +33,6 @@ WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWIS
 ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE 
 POSSIBILITY OF SUCH DAMAGE.
 */
-
 //JavaScript Extensions
 (function () {
    if ( !Array.prototype.forEach ) {
@@ -117,6 +120,9 @@ var iio = {};
     }
     iio.isNumber=function(o){
       return ! isNaN (o-0) && o !== null && o !== "" && o !== false;
+    }
+    iio.isString=function(s){
+      return typeof s == 'string' || s instanceof String;
     }
     iio.isBetween=function(val,min,max){
       if(max < min) {
@@ -776,7 +782,7 @@ var iio = {};
    Grid.prototype.set = function(v,y,c,r,res,yRes){
       if (c.tagName=="CANVAS"){
          this.C=parseInt(c.width/r,10)+1;
-         this.R=parseInt(c.height/r,10)+1;
+         this.R=parseInt(c.height/(res||r),10)+1;
          this.res = new iio.Vec(r,res||r)
       } else {
          this.R=r;
@@ -1114,6 +1120,7 @@ var iio = {};
       iio.Graphics.transformContext(ctx,pos,r);
       if (typeof obj.rAxis != 'undefined')
          iio.Graphics.transformContext(ctx,obj.rAxis);
+      if (obj.flipImg) ctx.scale(-1, 1);
       return ctx;
    }
    iio.Graphics.finishPathShape = function(ctx,obj,left,top,width,height){
@@ -1122,8 +1129,8 @@ var iio = {};
          ctx.drawImage(obj.img,left,top,width,height);
          ctx.restore();
       }
-      if (typeof obj.anims != 'undefined' && !iio.Graphics.drawImage(ctx,obj.anims[obj.animKey][obj.animFrame])){
-         ctx.drawImage(obj.anims[obj.animKey][obj.animFrame],left,top,width,height);
+      if (typeof obj.anims != 'undefined' && !iio.Graphics.drawImage(ctx,obj.anims[obj.animKey].srcs[obj.animFrame])){
+         ctx.drawImage(obj.anims[obj.animKey].srcs[obj.animFrame],left,top,width,height);
          ctx.restore();
       }
       if (typeof obj.styles != 'undefined'){
@@ -1340,6 +1347,8 @@ var iio = {};
       else if (typeof this.flipImg =='undefined')
          this.flipImg=true;
       else this.flipImg=!this.flipImg;
+      if (typeof this.fsID == 'undefined')
+      this.clearDraw(this.ctx);
    }
    function setImgSize(v,y){
       if (v == 'native') this.img.nativeSize=true;
@@ -1355,25 +1364,30 @@ var iio = {};
          this.img.onload = onLoadCallback;
       } return this;
    }
-   function addAnim(src, onLoadCallback){
+   function addAnim(src, tag, onLoadCallback){
       if (typeof this.anims == 'undefined') this.anims=[];
       if (typeof this.animKey == 'undefined') this.animKey=0;
       if (typeof this.animFrame == 'undefined') this.animFrame=0;
       var nI = this.anims.length;
       if (src instanceof iio.Sprite){
          this.anims[nI]=src;
-         this.anims[nI].tag=onLoadCallback;
+         this.anims[nI].tag=tag;
          return this;
       }
-      this.anims[nI]=[];
+      this.anims[nI]=new Object();
+      this.anims[nI].srcs=[];
+      if(typeof tag == 'function')
+         onLoadCallback=tag;
+      else this.anims[nI].tag=tag;
       for (var j=0;j<src.length;j++){
          if (typeof src[j].src !='undefined')
-            this.anims[nI][j]=src[j];
+            this.anims[nI].srcs[j]=src[j];
          else {
-            this.anims[nI][j]=new Image();
-            this.anims[nI][j].src=src[j];
+            this.anims[nI].srcs[j]=new Image();
+            this.anims[nI].srcs[j].src=src[j];
          }
-         if (j==this.animFrame) this.anims[nI][j].onload = onLoadCallback;
+         if (j==this.animFrame&&typeof onLoadCallback!='undefined')
+            this.anims[nI].srcs[j].onload = onLoadCallback;
       } return this;
    }
    function createWithImage(src, onLoadCallback){
@@ -1400,16 +1414,20 @@ var iio = {};
          }.bind(this);
       } return this;
    }
-   function createWithAnim(src,onLoadCallback,i){
+   function createWithAnim(src,tag,onLoadCallback,i){
       if (typeof i=='undefined' && iio.isNumber(onLoadCallback))
          i=onLoadCallback;
       i=i||0;
-      this.addAnim(src);
+      if (typeof tag=='function'){
+         onLoadCallback=tag;
+         this.addAnim(src);
+      }
+      else this.addAnim(src,tag);
       if (src instanceof iio.Sprite){
          this.width = src.frames[i].w;
          this.height = src.frames[i].h;
          this.animKey=0;
-         this.anims[0].tag=onLoadCallback;
+         //this.anims[0].tag=tag;
          this.animFrame=i||0;
          return this;
       }
@@ -1419,20 +1437,27 @@ var iio = {};
       } else {
          this.animKey=0;
          this.animFrame=i;
-         this.anims[0][i].onload = function(){
-            this.width=this.anims[0][i].width||0;
-            this.height=this.anims[0][i].height||0;
+         this.anims[0].srcs[i].onload = function(){
+            this.width=this.anims[0].srcs[i].width||0;
+            this.height=this.anims[0].srcs[i].height||0;
             if (typeof onLoadCallback != 'undefined' && !iio.isNumber(onLoadCallback))
                onLoadCallback();
          }.bind(this);
       } return this;
    }
    function nextAnimFrame(){
+      function resetFrame(io){
+         if (typeof io.onAnimComplete != 'undefined'){
+            if (io.onAnimComplete())
+               io.animFrame=0;
+         } else io.animFrame=0;
+      }
       this.animFrame++;
-      if ((this.anims[this.animKey] instanceof iio.Sprite &&
-         this.animFrame >= this.anims[this.animKey].frames.length)
-         || this.animFrame >= this.anims[this.animKey].length)
-         this.animFrame=0;
+      if (this.anims[this.animKey] instanceof iio.Sprite){
+         if(this.animFrame >= this.anims[this.animKey].frames.length)
+            resetFrame(this);
+      } else if ( this.animFrame >= this.anims[this.animKey].srcs.length)
+            resetFrame(this);
       this.clearDraw();
       return this;
    }
@@ -1440,12 +1465,17 @@ var iio = {};
       this.animFrame=i;
       return this;
    }
-   function playAnim(tag,fps,io,c){
+   function playAnim(tag,fps,io,c,f){
       if (!iio.isNumber(tag))
          this.setAnimKey(tag);
-      else{ c=io;io=fps;fps=tag; }
+      else{ f=c;c=io;io=fps;fps=tag; }
+      if (!iio.isNumber(c)){
+         this.onAnimComplete = c;
+         c=f||0;
+      } else this.onAnimComplete = f;
       if (typeof this.fsID != 'undefined')
          this.stopAnim();
+
       io.setFramerate(fps,function(){this.nextAnimFrame()}.bind(this),this,io.ctxs[c||0]);
       return this;
    }
@@ -1531,6 +1561,7 @@ var iio = {};
          this.clearSelf(ctx);
       return this;
    }
+   iio.Text.prototype.clearDraw = iio.Shape.prototype.clearDraw;
    iio.Line.prototype.draw = function(ctx){
       ctx=ctx||this.ctx;
       iio.Graphics.prepStyledContext(ctx,this.styles);
@@ -1566,6 +1597,17 @@ var iio = {};
                                ,iio.Vec.add(this.pos,-this.width/2,this.height/2));
       ctx.restore();
       return this;
+   }
+   iio.Text.prototype.clearSelf = function(ctx){
+       ctx=ctx||this.ctx;
+      // iio.Graphics.prepStyledContext(ctx,this.styles);
+      // iio.Graphics.transformContext(ctx,this.pos,this.rotation);
+      ctx.font = this.font;
+      var fs = parseInt(this.font,10);
+      var m = ctx.measureText(this.text);
+      if (this.textAlign=='center') return clearShape(ctx,this,m.width,fs,-m.width/2,-fs);
+      else if (this.textAlign=='right'||this.textAlign=='end') return clearShape(ctx,this,m.width,fs,-m.width,-fs);
+      else return clearShape(ctx,this,m.width,fs,0,-fs);
    }
    iio.Text.prototype.draw = function(ctx){
       ctx=ctx||this.ctx;
@@ -1611,9 +1653,9 @@ var iio = {};
       }
       if (typeof this.anims != 'undefined'){
          if (this.anims[this.animKey] instanceof iio.Sprite)
-               iio.Graphics.drawSprite(ctx,this.width,this.height,this.anims[this.animKey],this.animFrame,this.flipImg);
-         else if(!iio.Graphics.drawImage(ctx,this.anims[this.animKey][this.animFrame])){
-            ctx.drawImage(this.anims[this.animKey][this.animFrame], -this.width/2, -this.height/2, this.width, this.height);
+               iio.Graphics.drawSprite(ctx,this.width,this.height,this.anims[this.animKey],this.animFrame);
+         else if(!iio.Graphics.drawImage(ctx,this.anims[this.animKey].srcs[this.animFrame])){
+            ctx.drawImage(this.anims[this.animKey].srcs[this.animFrame],-this.width/2,-this.height/2,this.width,this.height);
             ctx.restore();
          }
       }
@@ -1642,8 +1684,8 @@ var iio = {};
          ctx.drawImage(this.img, -this.radius,-this.radius,this.radius*2,this.radius*2);
          ctx.restore();
       }
-      if (typeof this.anims != 'undefined' && !iio.Graphics.drawImage(ctx,this.anims[this.animKey][this.animFrame])){
-         ctx.drawImage(this.anims[this.animKey][this.animFrame], -this.radius,-this.radius,this.radius*2,this.radius*2);
+      if (typeof this.anims != 'undefined' && !iio.Graphics.drawImage(ctx,this.anims[this.animKey].srcs[this.animFrame])){
+         ctx.drawImage(this.anims[this.animKey].srcs[this.animFrame], -this.radius,-this.radius,this.radius*2,this.radius*2);
          ctx.restore();
       }
       if (typeof this.styles != 'undefined'){
@@ -1984,9 +2026,15 @@ var iio = {};
       for (var i=0; i<this.objs.length; i++)
          if (obj == this.objs[i]){
             this.objs.splice(i,1);
+            if (typeof obj.m_I !='undefined')
+                return obj.GetWorld().DestroyBody(obj);
             return true;
             }
       return  false;
+   }
+   Group.prototype.rmvAll = function(){
+      this.objs=[];
+      return true;
    }
    Group.prototype.addCollisionCallback = function(tag, callback){
       if (typeof(this.collisionTags)=='undefined') this.collisionTags = [];
@@ -2034,10 +2082,10 @@ var iio = {};
       this.cnvs = [];
       this.ctxs = [];
       if (typeof app=='undefined') throw new Error("iio.start: No app provided");
-      if (typeof w=='undefined' && (typeof id == 'string' || id instanceof String)) 
+      if (typeof w=='undefined' && iio.isString(id)) 
          this.addCanvas(id);
       else {
-         if (typeof id == 'string' || id instanceof String){
+         if (iio.isString(id)){
             if (id=='auto'){
                h = w || 'auto';
                w = id;
@@ -2105,11 +2153,14 @@ var iio = {};
       if (c instanceof iio.Obj) {
          clearTimeout(c.fsID);
          return c;
-      }
-      else {
+      } else {
          c=c||0;
          clearTimeout(this.cnvs[c].fsID);
       }
+   }
+   AppManager.prototype.setCursorStyle = function(style, c){
+      this.cnvs[c||0].style.cursor = style||'default';
+      return this;
    }
    //DEPRECATED: will be removed in future version, replaced by 'Shape.playAnim'
    AppManager.prototype.setAnimFPS = function(fps,obj,c){
@@ -2121,16 +2172,17 @@ var iio = {};
          },obj,this.ctxs[c]);
       else
       this.setFramerate(fps,function(){obj.nextAnimFrame()},obj,this.ctxs[c]);
+      return this;
    }
    AppManager.prototype.setB2Framerate = function( fps, callback ){
       if (typeof this.b2lastTime == 'undefined')
          this.b2lastTime=0;
-      if (typeof this.b2World!='undefined')
+      if (typeof this.b2World!='undefined' && !this.b2Pause)
          this.b2World.Step(1/this.fps, 10, 10);
       iio.requestTimeout(fps,this.b2lastTime, function(dt,args){
          args[0].b2lastTime=dt;
          args[0].setB2Framerate(fps,callback);
-         if (typeof args[0].b2World!='undefined')
+         if (typeof args[0].b2World!='undefined' && !args[0].b2Pause)
             args[0].b2World.Step(1/fps, 10, 10);
          callback(dt);
          if (typeof args[0].b2DebugDraw!='undefined'&&args[0].b2DebugDraw)
@@ -2139,6 +2191,14 @@ var iio = {};
          if (typeof this.b2World!='undefined')
             args[0].b2World.ClearForces();
       }, [this]);
+      return this;
+   }
+   AppManager.prototype.pauseB2World = function(pause){
+      if (typeof pause=='undefined'){
+         if (typeof this.b2Pause=='undefined')
+            this.b2Pause = true;
+         else this.b2Pause = !this.b2Pause;
+      } else this.b2Pause = pause;
    }
    AppManager.prototype.addB2World = function(world,c){
       this.b2World=world;
@@ -2152,7 +2212,6 @@ var iio = {};
       for (var c=0;c<this.cnvs.length;c++) 
          this.cnvs[c].update(dt);
    }
-
    AppManager.prototype.draw = function(i){
       if (typeof i =='undefined')
          for (var c=0;c<this.cnvs.length;c++)
@@ -2162,7 +2221,7 @@ var iio = {};
    }
    AppManager.prototype.addCanvas = function( zIndex, w, h, attachId, cssClasses ){
       var i=this.cnvs.length;
-      if (typeof zIndex == 'string' || zIndex instanceof String){
+      if (iio.isString(zIndex)){
          if (!document.getElementById(zIndex))
             throw new Error("AppManager.addCanvas: Invalid canvas id '"+zIndex+"'");
          this.cnvs[i]=document.getElementById(zIndex);
@@ -2186,7 +2245,7 @@ var iio = {};
       this.cnvs[i].style.zIndex = zIndex || -i;
       
       //Attach the canvas
-      if (typeof attachId == 'string' || attachId instanceof String){
+      if (iio.isString(attachId)){
          if (attachId=='body') document.body.appendChild(this.cnvs[i])
          else document.getElementById(attachId).appendChild(this.cnvs[i])
       } 
@@ -2207,7 +2266,7 @@ var iio = {};
       if (cssClasses instanceof Array)
          for (var j=0;j<cssClasses.length;j++) 
             this.cnvs[i].className += " "+cssClasses[j];
-      else if (typeof cssClasses == 'string' || cssClasses instanceof String)
+      else if (iio.isString(cssClasses))
          this.cnvs[i].className += " "+cssClasses;
 
       //TODO define specific display options and put styles back when app is terminated
@@ -2228,13 +2287,19 @@ var iio = {};
           = document.body.style.paddingTop = document.body.style.paddingBottom = "0";
          this.fullHeight=true;
       }
-
-
       this.ctxs[i] = this.cnvs[i].getContext('2d');
       this.setCanvasProperties(i);
       this.setCanvasFunctions(i);
       this.addFocusListeners(i);
       return i;
+   }
+   AppManager.prototype.disableContextMenu=function(c){
+         c=c||0;
+         this.cnvs[c].oncontextmenu=function(){return false};  
+   }
+   AppManager.prototype.setOnContextMenu=function(fn, c){
+      c=c||0;
+      this.cnvs[c].oncontextmenu=fn;
    }
    AppManager.prototype.setCanvasFunctions = function(c){
       this.ctxs[c].webkitImageSmoothingEnabled=true;
@@ -2352,6 +2417,21 @@ var iio = {};
       }
    }
 
+   /* SOUND CONTROL
+    */
+    AppManager.prototype.playSound = function(pathToSound){
+      if (typeof this.muted == 'undefined' || !this.muted) 
+         iio.playSound(pathToSound);
+      return this;
+    }
+    AppManager.prototype.mute = function(yes){
+      if (typeof this.muted == 'undefined') 
+         this.muted = true;
+      if (typeof yes != 'undefined')
+         this.muted = yes;
+      return this;
+    }
+
    /* GROUP CONTROL FUNCTIONS
     */
    AppManager.prototype.addGroup = function(tag, zIndex, c){
@@ -2424,14 +2504,40 @@ var iio = {};
          tag2 = tag1;
       }
       this.cnvs[c||0].groups[this.indexOfTag(tag1)].addCollisionCallback(tag2, callback);
-   },
+   }
+   AppManager.prototype.rmv = function(obj, group, c){
+         if (iio.isNumber(group)) return this.rmvObj(obj,group);
+         else if (typeof group == 'undefined') {
+            if (iio.isString(obj))
+               return this.rmvGroup(obj);
+            return this.rmvObj(obj);
+         } else return this.rmvFromGroup(group,obj,c);
+   }
+   AppManager.prototype.delayRmv = function(time, obj, group, c){
+      obj.io=this;
+      setTimeout(function(){obj.io.rmv(obj,group,c)},time);
+   }
    AppManager.prototype.rmvObj = function(obj,c){
       c=c||0;
       if (typeof(this.cnvs[c].groups)!='undefined')
-         for (var i=0; i<this.cnvs[c].groups.length; i++)
+         for (var i=0; i<this.cnvs[c].groups.length; i++){
+            if (typeof obj.K=='undefined'){
+               this.cancelFramerate(obj);
+               if (typeof this.cnvs[c].fps=='undefined')
+                  obj.clearSelf(this.ctxs[c]);
+            }
             if (this.cnvs[c].groups[i].rmvObj(obj))
                return true;
+         }
       return false;
+   }
+   AppManager.prototype.rmvGroup = function(tag,c){
+      c=c||0;
+      if (typeof(this.cnvs[c].groups)!='undefined')
+         if (typeof(this.cnvs[c].groups)!='undefined')
+            for (var i=0; i<this.cnvs[c].groups.length; i++)
+               if (this.cnvs[c].groups[i].tag==tag)
+                  return this.cnvs[c].groups.splice(i,1);
    }
    AppManager.prototype.rmvAll = function(c){
       if (typeof c =='undefined'){
@@ -2442,20 +2548,29 @@ var iio = {};
          this.cnvs[c].groups=[];
       return this;
    }
-   AppManager.prototype.rmvFromGroup = function(obj, tag, c){
+   AppManager.prototype.rmvFromGroup = function(tag, obj, c){
       if (typeof c=='undefined'){
-         for (c=0;c<this.cnvs.length;c++)
+         if (iio.isNumber(obj)||typeof obj=='undefined'){
+            c=obj||0;
+            return this.clearGroup(tag,c);
+         } else for (c=0;c<this.cnvs.length;c++)
             if (typeof(this.cnvs[c].groups)!='undefined')
                for (var i=0; i<this.cnvs[c].groups.length; i++)
                   if (this.cnvs[c].groups[i].tag==tag)
                      return this.cnvs[c].groups[i].rmvObj(obj);
       } else if (typeof(this.cnvs[c].groups)!='undefined')
-               for (var i=0; i<this.cnvs[c].groups.length; i++)
-                  if (this.cnvs[c].groups[i].tag==tag)
-                     return this.cnvs[c].groups[i].rmvObj(obj);
+            for (var i=0; i<this.cnvs[c].groups.length; i++)
+               if (this.cnvs[c].groups[i].tag==tag)
+                  return this.cnvs[c].groups[i].rmvObj(obj);
       return false;
    }
-
+   AppManager.prototype.clearGroup = function(tag,c){
+      c=c||0;
+      if (typeof(this.cnvs[c].groups)!='undefined')
+         for (var i=0; i<this.cnvs[c].groups.length; i++)
+            if (this.cnvs[c].groups[i].tag==tag)
+               return this.cnvs[c].groups[i].rmvAll();
+   }
    /* BG Control
     */
    AppManager.prototype.setBGColor = function(color, c){
@@ -2471,6 +2586,13 @@ var iio = {};
    AppManager.prototype.setBGImage = function(src, c){
       c=c||0;
       this.cnvs[c].style.backgroundRepeat="no-repeat";
+      this.cnvs[c].style.background='url(images/bg.jpg) no-repeat center center fixed'; 
+      this.cnvs[c].style.WebkitBackgroundSize='cover';
+      this.cnvs[c].style.MozBackgroundSize='cover';
+      this.cnvs[c].style.OBackgroundSize='cover';
+      this.cnvs[c].style.backgroundSize='cover';
+      this.cnvs[c].style.Filter="progid:DXImageTransform.Microsoft.AlphaImageLoader(src='."+src+"', sizingMethod='scale')";
+      this.cnvs[c].style.MsFilter="progid:DXImageTransform.Microsoft.AlphaImageLoader(src='"+src+"', sizingMethod='scale')";
       return this.setBGPattern(src, c);
    }
 

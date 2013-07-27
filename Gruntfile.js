@@ -59,8 +59,8 @@ module.exports = function(grunt) {
 		concat: {
 			vendor: {
         src: [
-					'vendor/Box2dWeb-2.1.a.3.js', 
-					'vendor/iioEngine.js', 
+					'vendor/Box2dWeb-2.1.a.3.js',
+					'vendor/iioEngine.js',
 					'vendor/iioDebugger.js'
 				],
 				dest: 'dist/vendor.js'
