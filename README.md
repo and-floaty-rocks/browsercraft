@@ -6,7 +6,7 @@ steps for now
 
 clone repo    
 npm install    
-npm install -g grunt    
+npm install -g grunt-cli   
 use `grunt` to run tests and compile    
 use `grunt watch` to auto do shit as you save    
 
